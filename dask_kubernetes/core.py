@@ -489,7 +489,7 @@ class KubeCluster(Cluster):
             # logger.info("pending_pods = {}".format(pending_pods))
             if pending_pods:
                 pending_to_delete = pending_pods[:n_to_delete]
-                logger.info("Deleting pending pods: %s", pending_to_delete)
+                # logger.info("Deleting pending pods: %s", (pending_to_delete)
                 self._delete_pods(pending_to_delete)
                 n_to_delete = n_to_delete - len(pending_to_delete)
                 if n_to_delete <= 0:
@@ -499,7 +499,7 @@ class KubeCluster(Cluster):
                 n_to_delete, worker_type=worker_type
             )
             logger.info("Closing workers: %s", to_close)
-            if len(to_close) < len(
+            if len(to_close) <= len(
                 self.filter_workers_by_type(
                     self.cluster.scheduler.workers.values(), worker_type
                 )
@@ -522,7 +522,7 @@ class KubeCluster(Cluster):
 
     def _delete_pods(self, to_delete):
         for pod in to_delete:
-            logger.info("to_delete = {}".format(pod))
+            logger.info("to_delete = {}".format(pod.metadata.name))
             try:
                 self.core_api.delete_namespaced_pod(pod.metadata.name, self.namespace)
                 pod_info = pod.metadata.name
@@ -608,7 +608,7 @@ class KubeCluster(Cluster):
         # Convert this to a set of IPs
         ips = set(urlparse(worker).hostname for worker in workers)
         to_delete = [p for p in pods if p.status.pod_ip in ips]
-        logger.info("ips = {} to_delete = {}".format(ips, to_delete))
+        logger.info("ips = {} to_delete = {}".format(ips, [d.metadata.name for d in to_delete]))
         if not to_delete:
             return
         self._delete_pods(to_delete)
@@ -687,7 +687,7 @@ def _cleanup_pods(namespace, labels):
 def format_labels(labels, get_all_worker_types=False):
     """ Convert a dictionary of labels into a comma separated string """
     if labels:
-        if labels.get("dask.org/worker-type"):
+        if get_all_worker_types and labels.get("dask.org/worker-type"):
             labels.pop("dask.org/worker-type")
         return ",".join(["{}={}".format(k, v) for k, v in labels.items()])
     else:
