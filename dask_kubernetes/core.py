@@ -206,7 +206,8 @@ class KubeCluster(Cluster):
         self.pod_template = pod_template
 
         # Default labels that can't be overwritten
-        self.pod_template.metadata.labels["dask.org/cluster-name"] = name
+        #self.pod_template.metadata.labels["dask.org/cluster-name"] = name
+        pod_template.metadata.labels["dask.org/worker-type"] = 'DEFAULT'
         self.pod_template.metadata.labels["user"] = escape(getpass.getuser())
         self.pod_template.metadata.labels["app"] = "dask"
         self.pod_template.metadata.labels["component"] = "dask-worker"
@@ -273,9 +274,8 @@ class KubeCluster(Cluster):
         name = escape(name)
 
         # Default labels that can't be overwritten
-        pod_template.metadata.labels["dask.org/cluster-name"] = name
-        if worker_type:
-            pod_template.metadata.labels["dask.org/worker-type"] = worker_type
+        # pod_template.metadata.labels["dask.org/cluster-name"] = name
+        pod_template.metadata.labels["dask.org/worker-type"] = worker_type if worker_type else 'DEFAULT'
         pod_template.metadata.labels["user"] = escape(getpass.getuser())
         pod_template.metadata.labels["app"] = "dask"
         pod_template.metadata.labels["component"] = "dask-worker"
@@ -399,7 +399,7 @@ class KubeCluster(Cluster):
     def scheduler_address(self):
         return self.scheduler.address
 
-    def pods(self, worker_type=None):
+    def pods(self, worker_type=None, get_all_worker_types=False):
         """ A list of kubernetes pods corresponding to current workers
 
         Parameters
@@ -416,14 +416,14 @@ class KubeCluster(Cluster):
             label_selector=format_labels(
                 self.worker_type_pod_templates[worker_type].metadata.labels
                 if worker_type
-                else self.pod_template.metadata.labels
+                else self.pod_template.metadata.labels,
+                get_all_worker_types=get_all_worker_types
             ),
         ).items
 
     @property
     def workers(self, worker_type=None):
-        # TODO: this needs to return *all* workers -- the Widget uses this to get the count of total workers
-        return self.pods()
+        return self.pods(worker_type=worker_type, get_all_worker_types=True)
 
     def logs(self, pod=None):
         """ Logs from a worker pod
@@ -486,7 +486,7 @@ class KubeCluster(Cluster):
             running_workers = list(self.scheduler.workers.keys())
             running_ips = set(urlparse(worker).hostname for worker in running_workers)
             pending_pods = [p for p in pods if p.status.pod_ip not in running_ips]
-            logger.info("pending_pods = {}".format(pending_pods))
+            # logger.info("pending_pods = {}".format(pending_pods))
             if pending_pods:
                 pending_to_delete = pending_pods[:n_to_delete]
                 logger.info("Deleting pending pods: %s", pending_to_delete)
@@ -684,9 +684,11 @@ def _cleanup_pods(namespace, labels):
                 raise
 
 
-def format_labels(labels):
+def format_labels(labels, get_all_worker_types=False):
     """ Convert a dictionary of labels into a comma separated string """
     if labels:
+        if labels.get("dask.org/worker-type"):
+            labels.pop("dask.org/worker-type")
         return ",".join(["{}={}".format(k, v) for k, v in labels.items()])
     else:
         return ""
